@@ -1,0 +1,5 @@
+/target
+/dist
+/.fileback-diagnostics/
+.DS_Store
+*.log

@@ -1,0 +1,48 @@
+[package]
+name = "fileBack"
+version = "0.1.0"
+edition = "2024"
+description = "A read-only macOS disk scanning and selective file recovery tool built with Rust and GPUI"
+license = "Apache-2.0"
+readme = "README.md"
+publish = false
+keywords = ["recovery", "forensics", "macos", "gpui"]
+categories = ["filesystem", "gui"]
+
+[lib]
+name = "fileback"
+path = "src/lib.rs"
+
+[features]
+default = ["gui"]
+gui = ["dep:gpui"]
+
+[dependencies]
+anyhow = "1.0"
+libc = "0.2"
+memchr = "2.7"
+memmap2 = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3.27"
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit"], optional = true }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
+
+[[bin]]
+name = "fileback"
+path = "src/main.rs"
+required-features = ["gui"]
+
+[[bin]]
+name = "fileback-cli"
+path = "src/cli.rs"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

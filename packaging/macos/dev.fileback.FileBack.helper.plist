@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.fileback.FileBack.helper</string>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>dev.fileback.FileBack</string>
+    </array>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/PrivilegedHelperTools/dev.fileback.FileBack.helper</string>
+        <string>run-helper</string>
+        <string>--client-hash</string>
+        <string>__CLIENT_HASH__</string>
+    </array>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>Sockets</key>
+    <dict>
+        <key>fileback</key>
+        <dict>
+            <key>SockPathName</key>
+            <string>/Library/Application Support/FileBack/helper.sock</string>
+            <key>SockPathOwner</key>
+            <integer>0</integer>
+            <key>SockPathGroup</key>
+            <integer>80</integer>
+            <key>SockPathMode</key>
+            <integer>432</integer>
+        </dict>
+    </dict>
+</dict>
+</plist>

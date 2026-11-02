@@ -1,0 +1,66 @@
+name: 缺陷报告
+description: 报告可复现的 FileBack 问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请不要上传真实磁盘镜像、恢复出的个人文件、密码或其他敏感数据。
+        安全漏洞请按照 SECURITY.md 使用私密渠道报告。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 简要说明发生了什么。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 尽量提供使用合成镜像的最小复现步骤。
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 包括错误信息；粘贴日志前请移除用户名和敏感路径。
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: FileBack 版本或提交
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 与硬件
+      placeholder: macOS 版本、Intel 或 Apple Silicon
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 补充信息
+      description: 可附合成样本的生成方式、GUI 截图或相关日志。
