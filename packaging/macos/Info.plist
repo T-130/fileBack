@@ -6,6 +6,8 @@
     <string>zh_CN</string>
     <key>CFBundleDisplayName</key>
     <string>FileBack</string>
+    <key>CFBundleIconFile</key>
+    <string>FileBack</string>
     <key>CFBundleExecutable</key>
     <string>fileback</string>
     <key>CFBundleIdentifier</key>
