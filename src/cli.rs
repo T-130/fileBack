@@ -211,6 +211,46 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
+        Some("analyze-device") => {
+            let Some(identifier) = arguments.next() else {
+                print_usage();
+                bail!("缺少磁盘标识，例如 disk0");
+            };
+            let Some(report_path) = arguments.next().map(PathBuf::from) else {
+                print_usage();
+                bail!("缺少扫描报告 JSON 路径");
+            };
+            let json = parse_json_flag(&mut arguments)?;
+            let disk = find_disk(&identifier)?;
+            let report_bytes = read_private_file(&report_path)
+                .with_context(|| format!("无法读取扫描报告 {}", report_path.display()))?;
+            let report: DeviceScanReport = serde_json::from_slice(&report_bytes)
+                .map_err(|error| anyhow::anyhow!("扫描报告格式无效：{error}"))?;
+            ensure_report_matches_disk(&disk, &report)?;
+            let analysis = fileback::device::analyze_device_candidates(
+                &disk.raw_device,
+                disk.size,
+                &report.candidates,
+            )?;
+            if json {
+                println!("{}", serde_json::to_string(&analysis)?);
+            } else {
+                for candidate in &report.candidates {
+                    if let Some(source) = analysis.candidates.get(&candidate.id) {
+                        println!(
+                            "{} · {} · {}",
+                            candidate.id,
+                            source.state.label(),
+                            source.evidence
+                        );
+                    }
+                }
+                if let Some(detail) = analysis.detail {
+                    println!("来源分析说明：{detail}");
+                }
+            }
+            Ok(())
+        }
         Some("recover-device") => {
             let Some(identifier) = arguments.next() else {
                 print_usage();
@@ -413,6 +453,7 @@ fn print_usage() {
         "  fileback-cli scan-device <diskN> [--json] [--progress <文件>] [--candidates <文件>] [--control <文件>]"
     );
     println!("  fileback-cli preview-device <diskN> <扫描报告JSON> [--json]");
+    println!("  fileback-cli analyze-device <diskN> <扫描报告JSON> [--json]");
     println!(
         "  fileback-cli recover-device <diskN> <扫描报告JSON> <另一物理盘上的空目录> [--json]"
     );

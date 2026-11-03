@@ -98,6 +98,16 @@ pub fn privileged_preview(
     helper::preview(disk, report)
 }
 
+/// 只读补充候选的 APFS 来源证据；失败由界面降级为“无法判断”。
+pub fn privileged_analyze(
+    disk: &LocalDisk,
+    report: &DeviceScanReport,
+) -> Result<crate::recovery::SourceAnalysis> {
+    super::ensure_report_matches_disk(disk, report)?;
+    ensure_helper()?;
+    helper::analyze(disk, report)
+}
+
 /// 第二阶段：二次确认后，只把扫描报告中的候选文件写入空目录。
 pub fn privileged_recover(
     disk: &LocalDisk,

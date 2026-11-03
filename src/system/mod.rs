@@ -11,7 +11,9 @@ pub use disk::{
 };
 #[cfg(target_os = "macos")]
 pub use helper::run as run_privileged_helper;
-pub use privilege::{ScanSession, privileged_preview, privileged_recover, privileged_scan_device};
+pub use privilege::{
+    ScanSession, privileged_analyze, privileged_preview, privileged_recover, privileged_scan_device,
+};
 pub use status::{SystemStatus, detect_system_status};
 
 #[cfg(test)]

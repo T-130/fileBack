@@ -108,7 +108,7 @@ fn parallel_scan_reports_full_progress() {
 }
 
 #[test]
-fn recovers_only_selected_candidates() {
+fn source_analysis_failure_does_not_block_selected_recovery() {
     let temp = TempDir::new().expect("temp directory");
     let source = temp.path().join("device.img");
     let output = temp.path().join("recovered");
@@ -117,7 +117,7 @@ fn recovers_only_selected_candidates() {
     fixture.extend_from_slice(b"gap%PDF-1.7\nbody\n%%EOF");
     fs::write(&source, &fixture).expect("fixture");
     let scan_file = File::open(&source).expect("source");
-    let report = scan_file_ranges(
+    let mut report = scan_file_ranges(
         scan_file,
         &source,
         fixture.len() as u64,
@@ -125,6 +125,7 @@ fn recovers_only_selected_candidates() {
         ScanHooks::default(),
     )
     .expect("scan");
+    report.source_analysis.detail = Some("synthetic analysis failure".into());
     let selected = vec![report.candidates[1].clone()];
     let recovery_file = File::open(&source).expect("source");
 

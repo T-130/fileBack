@@ -5,7 +5,7 @@
 //! 只用于将登录项关联到 FileBack，不会传递主应用的隐私授权。
 
 use super::disk::LocalDisk;
-use crate::recovery::{CandidatePreview, DeviceScanReport, ScanReport};
+use crate::recovery::{CandidatePreview, DeviceScanReport, ScanReport, SourceAnalysis};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -27,6 +27,10 @@ enum HelperRequest {
         control: PathBuf,
     },
     Preview {
+        identifier: String,
+        report: DeviceScanReport,
+    },
+    Analyze {
         identifier: String,
         report: DeviceScanReport,
     },
@@ -56,6 +60,14 @@ pub(super) fn preview(
         report: report.clone(),
     })?;
     serde_json::from_value(response).context("无法解析候选预览结果")
+}
+
+pub(super) fn analyze(disk: &LocalDisk, report: &DeviceScanReport) -> Result<SourceAnalysis> {
+    let response = request(&HelperRequest::Analyze {
+        identifier: disk.identifier.clone(),
+        report: report.clone(),
+    })?;
+    serde_json::from_value(response).context("无法解析来源分析结果")
 }
 
 pub(super) fn recover(
@@ -364,6 +376,18 @@ fn execute_request(
                 .arg("--json")
                 .output()
                 .context("无法执行候选预览")?
+        }
+        HelperRequest::Analyze { identifier, report } => {
+            let mut report_file = tempfile::NamedTempFile::new().context("无法创建临时扫描报告")?;
+            serde_json::to_writer(&mut report_file, &report).context("无法写入临时扫描报告")?;
+            std::io::Write::flush(&mut report_file).context("无法同步临时扫描报告")?;
+            Command::new(cli)
+                .arg("analyze-device")
+                .arg(identifier)
+                .arg(report_file.path())
+                .arg("--json")
+                .output()
+                .context("无法执行 APFS 来源分析")?
         }
         HelperRequest::Recover {
             identifier,

@@ -3,3 +3,4 @@
 /.fileback-diagnostics/
 .DS_Store
 *.log
+Cargo.lock

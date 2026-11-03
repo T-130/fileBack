@@ -2,10 +2,10 @@
 
 use crate::{
     device::{DeviceCandidate, DeviceScanReport},
-    recovery::{CandidatePreview, ScanReport},
+    recovery::{CandidatePreview, ScanReport, SourceAnalysis},
     system::{
         LocalDisk, ScanSession, detect_system_status, ensure_report_matches_disk, list_local_disks,
-        privileged_preview, privileged_recover, privileged_scan_device,
+        privileged_analyze, privileged_preview, privileged_recover, privileged_scan_device,
     },
 };
 use gpui::{Context, PathPromptOptions, Task, prelude::*};
@@ -36,6 +36,8 @@ pub(crate) struct FileBackApp {
     pub(crate) preview_loading: bool,
     pub(crate) preview_error: Option<String>,
     pub(crate) preview_generation: u64,
+    pub(crate) analyzing_sources: bool,
+    pub(crate) analysis_generation: u64,
     pub(crate) recovery_report: Option<ScanReport>,
     pub(crate) system_status: String,
     pub(crate) scan_session: Option<Arc<ScanSession>>,
@@ -61,6 +63,8 @@ impl FileBackApp {
             preview_loading: false,
             preview_error: None,
             preview_generation: 0,
+            analyzing_sources: false,
+            analysis_generation: 0,
             recovery_report: None,
             system_status: "正在检查快照和备份状态…".into(),
             scan_session: None,
@@ -168,6 +172,77 @@ impl FileBackApp {
         self.preview_loading = false;
         self.preview_error = None;
         self.preview_generation = self.preview_generation.wrapping_add(1);
+        self.analyzing_sources = false;
+        self.analysis_generation = self.analysis_generation.wrapping_add(1);
+    }
+
+    /// 扫描成功后独立分析来源；即使分析失败，已扫描候选和恢复入口仍然保留。
+    fn start_source_analysis(&mut self, cx: &mut Context<Self>) {
+        let (Some(disk), Some(report)) = (
+            self.selected_disk
+                .as_ref()
+                .and_then(|identifier| {
+                    self.disks
+                        .iter()
+                        .find(|disk| &disk.identifier == identifier)
+                })
+                .cloned(),
+            self.scan_report.clone(),
+        ) else {
+            return;
+        };
+        if report.candidates.is_empty() {
+            if let Some(current) = &mut self.scan_report {
+                current.source_analysis.complete = true;
+            }
+            return;
+        }
+
+        self.analyzing_sources = true;
+        self.status = format!(
+            "{} 正在只读分析 APFS 当前文件、快照和空闲块…",
+            scan_result_status(&report)
+        );
+        let generation = self.analysis_generation;
+        let analyze = cx.background_spawn(async move { privileged_analyze(&disk, &report) });
+        cx.spawn(async move |this, cx| {
+            let result = analyze.await;
+            this.update(cx, |this, cx| {
+                if generation != this.analysis_generation {
+                    return;
+                }
+                this.analyzing_sources = false;
+                let Some(current) = &mut this.scan_report else {
+                    return;
+                };
+                let base_status = scan_result_status(current);
+                match result {
+                    Ok(analysis) => {
+                        let summary = source_analysis_summary(&analysis, current.candidates.len());
+                        current.source_analysis = analysis;
+                        if !this.scanning && !this.recovering && !this.choosing_destination {
+                            this.status = format!("{base_status} {summary}");
+                        }
+                    }
+                    Err(error) => {
+                        let detail = format!("{error:#}");
+                        log_line(&format!("APFS 来源分析不可用：{detail}"));
+                        current.source_analysis = SourceAnalysis {
+                            detail: Some(format!(
+                                "APFS 来源分析不可用：{detail}；所有候选保持无法判断，不影响预览或恢复"
+                            )),
+                            ..SourceAnalysis::default()
+                        };
+                        if !this.scanning && !this.recovering && !this.choosing_destination {
+                            this.status = format!("{base_status} 来源分析不可用，候选仍可预览和恢复");
+                        }
+                    }
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub(crate) fn load_candidate_previews(&mut self, cx: &mut Context<Self>) {
@@ -427,24 +502,13 @@ impl FileBackApp {
                 this.scan_session = None;
                 match result {
                     Ok(report) => {
-                        this.status = if report.canceled {
-                            format!(
-                                "扫描已取消：保留 {} 个候选文件；结果不完整，请谨慎选择或重新扫描",
-                                report.candidates.len()
-                            )
-                        } else {
-                            format!(
-                                "扫描完成：找到 {} 个完整候选文件；{} 个不完整；{} 个超过大小限制。请勾选要恢复的文件",
-                                report.candidates.len(),
-                                report.incomplete_candidates,
-                                report.oversized_candidates
-                            )
-                        };
+                        this.status = scan_result_status(&report);
                         // 候选文件可能包含误报，默认不选，恢复范围完全由用户确认。
                         this.selected_candidates.clear();
                         this.live_candidates.clear();
                         this.scan_report = Some(report);
                         this.load_candidate_previews(cx);
+                        this.start_source_analysis(cx);
                     }
                     Err(error) => {
                         let detail = format!("{error:#}");
@@ -690,6 +754,40 @@ fn read_candidate_updates(
     }
     *pending = remaining;
     candidates
+}
+
+fn scan_result_status(report: &DeviceScanReport) -> String {
+    if report.canceled {
+        format!(
+            "扫描已取消：保留 {} 个候选文件；结果不完整，请谨慎选择或重新扫描。",
+            report.candidates.len()
+        )
+    } else {
+        format!(
+            "扫描完成：找到 {} 个完整候选文件；{} 个不完整；{} 个超过大小限制。",
+            report.candidates.len(),
+            report.incomplete_candidates,
+            report.oversized_candidates
+        )
+    }
+}
+
+fn source_analysis_summary(analysis: &SourceAnalysis, total: usize) -> String {
+    use crate::recovery::CandidateSourceState;
+    let count = |state| {
+        analysis
+            .candidates
+            .values()
+            .filter(|source| source.state == state)
+            .count()
+    };
+    let present = count(CandidateSourceState::Present);
+    let snapshots = count(CandidateSourceState::Snapshot);
+    let deleted = count(CandidateSourceState::ProbablyDeleted);
+    let unknown = total.saturating_sub(present + snapshots + deleted);
+    format!(
+        "来源分析：现存 {present} · 快照 {snapshots} · 疑似已删除 {deleted} · 无法判断 {unknown}。请结合证据勾选文件。"
+    )
 }
 
 fn log_line(message: &str) {

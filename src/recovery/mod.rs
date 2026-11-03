@@ -11,8 +11,8 @@ pub(crate) mod format;
 mod model;
 pub(crate) mod preview;
 pub use model::{
-    CandidatePreview, DeviceCandidate, DeviceScanReport, FileCategory, FileKind, RecoveredFile,
-    ScanOptions, ScanReport,
+    CandidatePreview, CandidateSource, CandidateSourceState, DeviceCandidate, DeviceScanReport,
+    FileCategory, FileKind, RecoveredFile, ScanOptions, ScanReport, SourceAnalysis,
 };
 pub use preview::inspect_candidate;
 

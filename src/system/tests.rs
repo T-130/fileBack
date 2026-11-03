@@ -93,6 +93,7 @@ fn test_report() -> DeviceScanReport {
         incomplete_candidates: 0,
         oversized_candidates: 0,
         canceled: false,
+        source_analysis: crate::recovery::SourceAnalysis::default(),
     }
 }
 

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 const DEFAULT_MAX_FILE_SIZE: usize = 4 * 1024 * 1024 * 1024;
 
@@ -176,6 +176,64 @@ pub struct CandidatePreview {
     pub error: Option<String>,
 }
 
+/// 候选字节的 APFS 来源证据，不把空闲块直接等同于确定删除。
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CandidateSourceState {
+    Present,
+    Snapshot,
+    ProbablyDeleted,
+    #[default]
+    Unknown,
+}
+
+impl CandidateSourceState {
+    pub const ALL: [Self; 4] = [
+        Self::Present,
+        Self::Snapshot,
+        Self::ProbablyDeleted,
+        Self::Unknown,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Present => "现存文件引用",
+            Self::Snapshot => "快照中可恢复",
+            Self::ProbablyDeleted => "疑似已删除",
+            Self::Unknown => "无法判断",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct CandidateSource {
+    #[serde(default)]
+    pub state: CandidateSourceState,
+    /// 判断依据；无法判断时解释缺少什么证据。
+    #[serde(default)]
+    pub evidence: String,
+    /// 仅在与一个未碎片化文件精确对应时提供，不把签名匹配猜成原路径。
+    #[serde(default)]
+    pub volume: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub snapshot: Option<String>,
+}
+
+/// 一次扫描对应的来源分析。旧报告没有此字段，所有候选默认保持“无法判断”。
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct SourceAnalysis {
+    #[serde(default)]
+    pub candidates: HashMap<String, CandidateSource>,
+    /// 所有 APFS 容器、卷和计划内快照均已完成分析。
+    #[serde(default)]
+    pub complete: bool,
+    /// 不支持、部分解析或资源上限说明；不会阻断候选恢复。
+    #[serde(default)]
+    pub detail: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeviceScanReport {
     pub source: PathBuf,
@@ -189,6 +247,8 @@ pub struct DeviceScanReport {
     /// 扫描被用户取消时为 true：candidates 里是取消前已发现的部分结果。
     #[serde(default)]
     pub canceled: bool,
+    #[serde(default)]
+    pub source_analysis: SourceAnalysis,
 }
 
 #[derive(Clone, Copy, Debug)]

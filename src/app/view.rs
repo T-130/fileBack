@@ -5,7 +5,10 @@ use gpui::{
 };
 use std::sync::Arc;
 
-use crate::{device::DeviceCandidate, recovery::FileCategory};
+use crate::{
+    device::DeviceCandidate,
+    recovery::{CandidateSourceState, FileCategory},
+};
 
 use super::{FileBackApp, format_size, state::CANDIDATES_PER_PAGE};
 
@@ -408,7 +411,7 @@ impl Render for FileBackApp {
                                         .text_xs()
                                         .text_color(rgb(0x64748b))
                                         .whitespace_normal()
-                                        .child("原文件名通常无法从签名恢复；请结合缩略图、尺寸或文档标题选择。自动编号仅用于防止覆盖。"),
+                                        .child("请结合缩略图、尺寸、文档标题和来源证据选择。只有精确匹配 APFS 数据流时才显示原路径；自动编号不是原文件名。"),
                                 )
                                 .child(
                                     div()
@@ -426,6 +429,58 @@ impl Render for FileBackApp {
                                             (count > 0).then(|| format!("{} {count}", category.label()))
                                         })),
                                 )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_wrap()
+                                        .gap_3()
+                                        .text_xs()
+                                        .text_color(rgb(0x475569))
+                                        .children(CandidateSourceState::ALL.into_iter().map(|state| {
+                                            let count = report
+                                                .candidates
+                                                .iter()
+                                                .filter(|candidate| {
+                                                    report
+                                                        .source_analysis
+                                                        .candidates
+                                                        .get(&candidate.id)
+                                                        .map(|source| source.state)
+                                                        .unwrap_or(CandidateSourceState::Unknown)
+                                                        == state
+                                                })
+                                                .count();
+                                            format!("{} {count}", state.label())
+                                        })),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(0x72531b))
+                                        .whitespace_normal()
+                                        .child("“疑似已删除”只表示候选位于当前空闲块，不是确定删除或完整恢复保证；“无法判断”不等于文件不存在。"),
+                                )
+                                .when(self.analyzing_sources, |section| {
+                                    section.child(
+                                        div()
+                                            .p_2()
+                                            .rounded_md()
+                                            .bg(rgb(0xeaf2ff))
+                                            .text_sm()
+                                            .child("正在只读分析 APFS 当前文件、快照和空闲块；来源标签会在分析完成后更新。"),
+                                    )
+                                })
+                                .when_some(report.source_analysis.detail.clone(), |section, detail| {
+                                    section.child(
+                                        div()
+                                            .p_2()
+                                            .rounded_md()
+                                            .bg(rgb(0xfff7e8))
+                                            .text_sm()
+                                            .whitespace_normal()
+                                            .child(detail),
+                                    )
+                                })
                                 .when_some(self.preview_error.clone(), |section, error| {
                                     section.child(
                                         div()
@@ -499,6 +554,42 @@ impl Render for FileBackApp {
                                     let item_error = preview
                                         .as_ref()
                                         .and_then(|preview| preview.error.clone());
+                                    let source = report
+                                        .source_analysis
+                                        .candidates
+                                        .get(&id)
+                                        .cloned()
+                                        .unwrap_or_default();
+                                    let (source_color, source_background) = match source.state {
+                                        CandidateSourceState::Present => (0x15803d, 0xf0fdf4),
+                                        CandidateSourceState::Snapshot => (0x7c3aed, 0xf5f3ff),
+                                        CandidateSourceState::ProbablyDeleted => {
+                                            (0xa16207, 0xfff7e8)
+                                        }
+                                        CandidateSourceState::Unknown => (0x64748b, 0xf1f5f9),
+                                    };
+                                    let source_location = source
+                                        .volume
+                                        .as_ref()
+                                        .zip(source.path.as_ref())
+                                        .map(|(volume, path)| {
+                                            let snapshot = source
+                                                .snapshot
+                                                .as_ref()
+                                                .map(|name| format!(" · 快照 {name}"))
+                                                .unwrap_or_default();
+                                            format!("{volume}:{path}{snapshot}")
+                                        });
+                                    let source_evidence = if source.evidence.is_empty() {
+                                        if self.analyzing_sources {
+                                            "正在分析，暂不能判断文件是否被删除".to_string()
+                                        } else {
+                                            "尚未取得 APFS 来源证据，不能确认文件是否被删除"
+                                                .to_string()
+                                        }
+                                    } else {
+                                        source.evidence.clone()
+                                    };
                                     div()
                                         .id(("candidate", start + index))
                                         .flex()
@@ -569,6 +660,33 @@ impl Render for FileBackApp {
                                                 )
                                                 .child(
                                                     div()
+                                                        .flex()
+                                                        .items_center()
+                                                        .gap_2()
+                                                        .child(
+                                                            div()
+                                                                .px_2()
+                                                                .py_1()
+                                                                .rounded_md()
+                                                                .flex_shrink_0()
+                                                                .bg(rgb(source_background))
+                                                                .text_xs()
+                                                                .text_color(rgb(source_color))
+                                                                .child(source.state.label()),
+                                                        )
+                                                        .when_some(source_location, |row, location| {
+                                                            row.child(
+                                                                div()
+                                                                    .flex_1()
+                                                                    .truncate()
+                                                                    .text_xs()
+                                                                    .text_color(rgb(0x475569))
+                                                                    .child(location),
+                                                            )
+                                                        }),
+                                                )
+                                                .child(
+                                                    div()
                                                         .text_xs()
                                                         .text_color(rgb(0x64748b))
                                                         .child(format!(
@@ -577,6 +695,13 @@ impl Render for FileBackApp {
                                                             kind.category().label(),
                                                             candidate.source_offset
                                                         )),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .text_color(rgb(source_color))
+                                                        .whitespace_normal()
+                                                        .child(source_evidence),
                                                 )
                                                 .when(!details.is_empty(), |container| {
                                                     container.child(

@@ -54,6 +54,92 @@ pub fn scan_device_index(
     bail!("本地物理磁盘扫描目前仅支持 macOS")
 }
 
+/// 通过同一只读原始设备句柄补充 APFS 来源证据，不改变任何候选范围。
+#[cfg(target_os = "macos")]
+pub fn analyze_device_candidates(
+    source: &Path,
+    source_size: u64,
+    candidates: &[DeviceCandidate],
+) -> Result<crate::recovery::SourceAnalysis> {
+    raw_device_identifier(source)?;
+    let file = open_raw_device(source, source_size)?;
+    let reader = RawDeviceReader::new(file, source_size);
+    Ok(crate::filesystem::analyze_disk(
+        reader,
+        source_size,
+        candidates,
+    ))
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn analyze_device_candidates(
+    _source: &Path,
+    _source_size: u64,
+    _candidates: &[DeviceCandidate],
+) -> Result<crate::recovery::SourceAnalysis> {
+    bail!("本地物理磁盘来源分析目前仅支持 macOS")
+}
+
+/// apfs-core 使用 Seek + Read；这里沿用扫描器的 4096 字节对齐原始盘读取。
+#[cfg(target_os = "macos")]
+struct RawDeviceReader {
+    file: File,
+    source_size: u64,
+    position: u64,
+}
+
+#[cfg(target_os = "macos")]
+impl RawDeviceReader {
+    fn new(file: File, source_size: u64) -> Self {
+        Self {
+            file,
+            source_size,
+            position: 0,
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl std::io::Read for RawDeviceReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        use anyhow::Context as _;
+        if buffer.is_empty() || self.position >= self.source_size {
+            return Ok(0);
+        }
+        let remaining = self.source_size - self.position;
+        let length = usize::try_from(remaining)
+            .unwrap_or(usize::MAX)
+            .min(buffer.len());
+        let read = read_at(&self.file, &mut buffer[..length], self.position)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        self.position = self
+            .position
+            .checked_add(read as u64)
+            .context("原始盘读取位置溢出")
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        Ok(read)
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl std::io::Seek for RawDeviceReader {
+    fn seek(&mut self, position: std::io::SeekFrom) -> std::io::Result<u64> {
+        let next = match position {
+            std::io::SeekFrom::Start(offset) => i128::from(offset),
+            std::io::SeekFrom::Current(delta) => i128::from(self.position) + i128::from(delta),
+            std::io::SeekFrom::End(delta) => i128::from(self.source_size) + i128::from(delta),
+        };
+        if next < 0 || next > i128::from(self.source_size) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "不能越过原始磁盘边界",
+            ));
+        }
+        self.position = next as u64;
+        Ok(self.position)
+    }
+}
+
 #[cfg(target_os = "macos")]
 pub fn preview_device_candidates(
     source: &Path,
@@ -267,6 +353,7 @@ fn scan_file_ranges(
         incomplete_candidates: 0,
         oversized_candidates: 0,
         canceled: false,
+        source_analysis: crate::recovery::SourceAnalysis::default(),
     };
     for result in results_in_order(chunk_results)? {
         report.candidates.extend(result.candidates);
