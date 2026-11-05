@@ -8,6 +8,7 @@
 
 - 增加项目 README、贡献指南、行为准则、安全政策与架构说明。
 - 增加统一 Rust 工具链、格式化配置、Clippy 规则和 GitHub Actions CI。
+- 所有第一方 Rust 源文件增加包含版权信息的完整 Apache-2.0 许可头，并在贡献指南中提供统一模板。
 - 增加 Issue 与 Pull Request 模板。
 - 增加 DOCX、XLSX、PPTX、MP4、MOV、M4A、AVI 和 WAV 的保守签名识别，默认单文件上限提高到 4 GiB。
 - 候选和恢复结果按图片、文档、表格、演示、视频、音频及压缩包分类展示，恢复文件写入对应子目录。

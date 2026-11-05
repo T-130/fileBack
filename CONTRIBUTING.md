@@ -40,11 +40,30 @@ cargo build --no-default-features --bin fileback-cli
 ## 代码规范
 
 - 使用 Rust 2024 和仓库固定的 `rustfmt` 配置。
+- 新增第一方 `.rs` 文件必须使用下方完整许可头；第三方代码保留其原有版权和许可声明。
 - 所有警告视为 CI 失败；不要使用 `allow` 掩盖新增警告。
 - 生产代码避免 `unwrap`、`expect` 和 panic；错误使用 `anyhow::Result` 并补充用户可理解的上下文。
 - 新增 `unsafe` 必须同时写明安全不变量，并优先考虑安全替代方案。
 - 公共类型与函数保持清晰、稳定的命名和文档；无关重构中不要改变公共 API。
 - 禁止提交 `dbg!`、未完成占位实现、真实用户数据或包含隐私的日志。
+
+### 源文件许可头
+
+```text
+// Copyright 2026 zyy, zjon234@gmail.com
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+```
 
 ## 测试要求
 
