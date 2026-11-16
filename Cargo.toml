@@ -19,7 +19,7 @@ gui = ["dep:gpui"]
 
 [dependencies]
 anyhow = "1.0"
-apfs-core = "0.2.6"
+apfs-core = "0.3.0"
 crc32fast = "1.5"
 libc = "0.2"
 memchr = "2.7"
